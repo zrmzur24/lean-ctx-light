@@ -10,16 +10,29 @@ import { spawnSync } from "node:child_process";
 
 // Exclusions : commandes dont l'output doit rester RAW.
 //
-// Groupes :
+// Groupes (prefix-anchored — doit commencer au début du segment) :
 //   - git\s+(diff|show|log)                  → contenu critique pour review/audit
 //   - cymbal                                   → déjà optimisé, éviter double-processing
 //   - LEAN_CTX_DISABLED=                       → kill-switch explicit de l'agent
-//   - (npm run )?(vitest|tsc|eslint|lint|typecheck) → runners de tests/typecheck/lint
+//   - (npm run )?(vitest|tsc|eslint|lint|typecheck) → runners tests/typecheck/lint
 //   - (npx )?(vitest|tsc|eslint)              → même chose via npx
+//   - npm (run )?test\b                       → `npm test` et `npm run test[:scope]`
+//   - node ... --test\b                       → native Node test runner (--test anywhere)
+//   - diff\b                                   → GNU diff, contenu critique comme git diff
+//   - jq\b / yq\b                              → JSON/YAML processors, output structuré
+//
+// Groupe CONTAINS (flag n'importe où dans le segment) :
+//   - --json                                   → commandes émettant du JSON structuré
+//                                                 (gh --json, curl --json, …)
 //
 // Pour les test runners : leur sortie est déjà structurée et critique
 // pour l'agent (détection FAIL, error TSxxxx, etc.). Compression risquée.
-export const EXCLUDED = /^\s*(git\s+(diff|show|log)|cymbal|LEAN_CTX_DISABLED=|(npm\s+run\s+)?(vitest|tsc|eslint|lint|typecheck)\b|(npx\s+)?(vitest|tsc|eslint)\b)/;
+export const EXCLUDED = /^\s*(git\s+(diff|show|log)|cymbal|LEAN_CTX_DISABLED=|(npm\s+run\s+)?(vitest|tsc|eslint|lint|typecheck)\b|(npx\s+)?(vitest|tsc|eslint)\b|npm\s+(run\s+)?test\b|node\s+(\S+\s+)*--test\b|diff\b|jq\b|yq\b)/;
+
+// Flags qui forcent RAW où qu'ils soient dans le segment.
+// --json : gh/curl/… émettent du JSON structuré que l'agent doit parser ;
+// la compression peut corrompre des valeurs de champs.
+export const EXCLUDED_CONTAINS = /(?:^|\s)--json(?:[=\s]|$)/;
 
 /**
  * POSIX shell quoting pour embedder une commande dans `sh -lc '...'`.
@@ -85,7 +98,7 @@ export function detectRuntime(): { leanCtx: boolean; sh: boolean; reason: string
  */
 export function isExcluded(command: string): boolean {
   const segments = command.split(/&&|\|\||;|\||\n/).map(s => s.trim()).filter(Boolean);
-  return segments.some(seg => EXCLUDED.test(seg));
+  return segments.some(seg => EXCLUDED.test(seg) || EXCLUDED_CONTAINS.test(seg));
 }
 
 /**
