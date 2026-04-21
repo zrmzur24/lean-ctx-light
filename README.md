@@ -206,9 +206,19 @@ For the full rationale including the adversarial analysis of token optimizers, c
 
 ## Contract with `pi-coding-agent` API
 
-- `createBashToolDefinition(cwd, { spawnHook })` — stable since pi v0.58.3
+- `createBashToolDefinition(cwd, { spawnHook })` — stable factory API
 - `spawnHook: ({ command, cwd, env }) => { command, cwd, env }` — can modify any field
+- `pi.registerTool({ ...baseBash, description })` — extension-style tool registration
 
 If pi changes this signature, the extension will fail at load time. `detectRuntime()` will still return a sensible state (can't distinguish API breakage from missing binary).
 
-Minimum pi version: **0.58.3** (`^0.67.0` in package.json devDeps for type checking, but the runtime API is older).
+### Version support
+
+| pi version | Status | Notes |
+|---|---|---|
+| **0.58.3** (min) | Supported | First version with `spawnHook` option in `BashToolOptions` |
+| **0.67.x** | Tested | Development version during initial release |
+| **0.68.0** | Tested | Breaking changes to SDK (not our concern); factory API unchanged |
+| Future | Best-effort | No known plans to break `createBashToolDefinition` / `spawnHook` |
+
+The `package.json` devDep constraint is `">=0.58.3"` (no upper bound). CI runs `npm install` on each push, so it will catch breakage against the latest pi release automatically. If CI goes red after a pi bump, check the pi [CHANGELOG](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md) for breaking changes affecting `createBashToolDefinition` or `spawnHook`.

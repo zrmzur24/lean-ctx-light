@@ -9,6 +9,59 @@ Versioning: [SemVer](https://semver.org/).
 
 Nothing yet.
 
+## [1.0.1] — 2026-04-21
+
+Compatibility verification with pi v0.68.0 (released 2026-04-20). No code
+changes — the existing implementation already uses the stable factory API.
+
+### Verified compatible with
+
+- pi v0.67.68 (current latest of 0.67.x line)
+- pi v0.68.0 (new latest, breaking changes analyzed below)
+
+### pi v0.68.0 breaking changes — impact analysis
+
+The 0.68.0 release removed the cwd-bound prebuilt tool exports
+(`readTool`, `bashTool`, `editTool`, etc.) in favor of the explicit
+factory form (`createReadTool(cwd)`, `createBashTool(cwd)`). It also
+changed the SDK `createAgentSession({ tools })` to accept `string[]`
+names instead of `Tool[]` instances, and removed ambient `process.cwd()`
+fallback from `DefaultResourceLoader` / `loadProjectContextFiles()` /
+`loadSkills()`.
+
+None of these affect this extension:
+- `createBashToolDefinition(cwd, { spawnHook })` — still exported, API
+  unchanged (the factory form this extension has always used).
+- SDK `createAgentSession` — not used by this extension (Extension API
+  `pi.registerTool()` used instead).
+- Resource helpers — not used.
+
+### Bug fixes in pi 0.67.68 / 0.68.0 that benefit us
+
+- Shell-path resolution (#3452, 0.67.68) — shell commands now follow the
+  active session cwd instead of the launcher cwd, improving behavior
+  when pi runs long sessions or `/cd` is used.
+- `tool_result` / `afterToolCall` error forwarding (#3051, 0.67.68) —
+  `details` and `isError` overrides no longer silently dropped on error
+  tool results. Benefits mcmg-workflow (which has `tool_result` hooks).
+- `@sinclair/typebox` runtime dependency (#3434, 0.67.68) — strict pnpm
+  installs no longer crash. Not relevant here (we don't use typebox) but
+  good for the ecosystem.
+
+### Changed
+
+- `package.json` devDep constraint relaxed from `^0.67.0` to `>=0.58.3`
+  to include v0.68.0 and future versions. The runtime contract we rely
+  on (`createBashToolDefinition` + `spawnHook`) has been stable since
+  v0.58.3 and is still current in v0.68.0.
+- CI matrix will pick up the latest pi version on each run (via `npm ci`
+  resolving the `>=0.58.3` range). This catches breakage early.
+
+### Tests
+
+- Re-ran 79 unit tests + typecheck against pi v0.68.0: all green.
+- No test changes needed (we test pure functions, not the pi runtime).
+
 ## [1.0.0] — 2026-04-21
 
 Initial public release. Extracted from a personal pi setup after being
@@ -98,5 +151,6 @@ validated on Windows MINGW/Git Bash with extensive adversarial testing.
   compression bug. `docker ps`, `df`, `pytest xfail` not relevant for
   TypeScript/React/Hono stacks but excluded where applicable.
 
-[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.1
 [1.0.0]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.0

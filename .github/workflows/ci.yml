@@ -48,8 +48,17 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
-      - name: Install deps
-        run: npm ci --no-audit --no-fund
+      - name: Install deps (respects package.json range)
+        # We use 'npm install' instead of 'npm ci' to always pull the LATEST
+        # pi-coding-agent version matching the '>=0.58.3' range. This way CI
+        # catches breakage from new pi releases as soon as they happen,
+        # rather than being frozen to whatever was in package-lock.json.
+        # The tradeoff: CI can go red on a new pi release we haven't seen yet.
+        # That's intentional — we want to know immediately.
+        run: npm install --no-audit --no-fund
+
+      - name: Log installed pi version (for debug)
+        run: npm list @mariozechner/pi-coding-agent || true
 
       - name: Typecheck
         run: npm run typecheck
