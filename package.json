@@ -1,0 +1,22 @@
+{
+  "name": "lean-ctx-light",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pi micro-extension: route bash through lean-ctx with hardcoded exclusions (git diff/show/log, cymbal, test runners). No MCP pollution.",
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "tsx --test core.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.67.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
