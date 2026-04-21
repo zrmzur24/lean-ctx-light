@@ -23,6 +23,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Use node 24 for the action runtime itself (opt-in before it becomes
+# default in June 2026) to silence the actions/checkout@v4 deprecation warning.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     name: test (node ${{ matrix.node }})
