@@ -53,10 +53,21 @@ export const EXCLUDED = /^\s*(
   |LEAN_CTX_DISABLED=              // explicit kill-switch
   |(npm\s+run\s+)?(vitest|tsc|eslint|lint|typecheck)\b   // test runners (FAIL detection)
   |(npx\s+)?(vitest|tsc|eslint)\b
+  |npm\s+(run\s+)?test\b           // npm test / npm run test[:scope] (v1.0.2)
+  |node\s+(\S+\s+)*--test\b        // native node --test runner (v1.0.2)
+  |diff\b                          // GNU diff, content-critical (v1.0.2)
+  |jq\b                            // JSON processor, structured output (v1.0.2)
+  |yq\b                            // YAML processor, structured output (v1.0.2)
 )/
+
+export const EXCLUDED_CONTAINS = /(?:^|\s)--json(?:[=\s]|$)/;  // v1.0.2: --json flag anywhere
 ```
 
-Chained commands (`cd X && cymbal Y`) are handled via `isExcluded()` which splits on `&&`, `;`, `|`, `||`, `\n` and excludes if **any** segment matches.
+Chained commands (`cd X && cymbal Y`) are handled via `isExcluded()` which splits on `&&`, `;`, `|`, `||`, `\n` and excludes if **any** segment matches either `EXCLUDED` (prefix-anchored) or `EXCLUDED_CONTAINS` (anywhere in segment).
+
+### Session-start discipline reminder (v1.0.2)
+
+When the runtime is active, the extension injects a one-shot reminder into the session history (via `pi.sendMessage` → `CustomMessageEntry`) so the LLM sees it on every turn. It lists the RAW exceptions and nudges the agent to use `cymbal investigate|trace|impact|callers|callees` for code navigation instead of grep/find. Dedup'd by `customType` scan, so reload/resume/fork don't re-inject.
 
 Rationale for each exclusion: see [rtk-test adversarial study](https://www.reddit.com/r/ClaudeCode/comments/1spiy8t/) — token optimizers can strip code content from diffs (reducing `git diff` to `file +1/-1`), making code review structurally impossible.
 
@@ -188,7 +199,7 @@ source ~/.bashrc
 
 ```bash
 npm install  # once
-npm test     # 79 tests: EXCLUDED regex, shellQuote, detectRuntime, isExcluded, buildWrappedCommand
+npm test     # 116 tests (v1.0.2): EXCLUDED/EXCLUDED_CONTAINS regex, shellQuote, detectRuntime, isExcluded, buildWrappedCommand
 npm run typecheck
 ```
 

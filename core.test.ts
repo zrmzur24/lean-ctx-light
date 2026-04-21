@@ -14,6 +14,131 @@ import assert from "node:assert/strict";
 import { EXCLUDED, shellQuote, detectRuntime, buildWrappedCommand, isExcluded } from "./core.ts";
 
 // ============================================================
+// v1.0.2 gaps — 6 patterns that were compressed-in-error before
+// (npm test, node --test, --json anywhere, diff, jq, yq)
+// ============================================================
+
+describe("v1.0.2 — npm test / node --test must stay RAW", () => {
+  const mustBeExcluded = [
+    // npm test (shortcut for `npm run test`)
+    ["npm test", "npm test bare"],
+    ["npm test -- --watch", "npm test with extra args"],
+    ["npm run test", "npm run test explicit"],
+    ["npm run test:unit", "npm run test:unit (scoped)"],
+
+    // native node test runner (--test flag anywhere on node cmd)
+    ["node --test", "node --test bare"],
+    ["node --test test/foo.js", "node --test with file arg"],
+    ["node --test --watch", "node --test with --watch"],
+    ["node --import tsx --test file.test.ts", "node --import ... --test"],
+  ];
+
+  for (const [cmd, desc] of mustBeExcluded) {
+    it(`RAW: ${desc} — "${cmd}"`, () => {
+      assert.ok(isExcluded(cmd), `Expected excluded: ${cmd}`);
+    });
+  }
+
+  it("npm install must still be COMPRESSED (npm-!=-test)", () => {
+    assert.ok(!isExcluded("npm install"));
+    assert.ok(!isExcluded("npm i foo"));
+  });
+
+  it("node script.js (no --test flag) must be COMPRESSED", () => {
+    assert.ok(!isExcluded("node script.js"));
+    assert.ok(!isExcluded("node build.mjs"));
+  });
+
+  it("`testing` / `tests` suffix does not trigger npm-test match", () => {
+    assert.ok(!isExcluded("npm testing")); // not a real cmd, but word-boundary sanity
+  });
+});
+
+describe("v1.0.2 — --json flag anywhere must stay RAW", () => {
+  const mustBeExcluded = [
+    ["gh pr view 123 --json number", "gh pr --json"],
+    ["gh pr list --json number,title,state", "gh pr list --json fields"],
+    ["gh run list --json databaseId", "gh run --json"],
+    ["gh issue view 1 --json body", "gh issue --json"],
+    ["curl --json '{\"foo\":1}' https://x", "curl --json"],
+    ["some-cli cmd --json=compact", "--json=value form"],
+  ];
+
+  for (const [cmd, desc] of mustBeExcluded) {
+    it(`RAW: ${desc} — "${cmd}"`, () => {
+      assert.ok(isExcluded(cmd), `Expected excluded: ${cmd}`);
+    });
+  }
+
+  it("commands WITHOUT --json are compressed", () => {
+    assert.ok(!isExcluded("gh pr list"));
+    assert.ok(!isExcluded("gh pr view 123"));
+  });
+
+  it("'--jsonfoo' (no word boundary) does not match", () => {
+    assert.ok(!isExcluded("cmd --jsonfoo"));
+  });
+
+  it("filename containing 'json' is not a match", () => {
+    assert.ok(!isExcluded("cat package.json"));
+    assert.ok(!isExcluded("ls data.json"));
+  });
+});
+
+describe("v1.0.2 — diff / jq / yq must stay RAW", () => {
+  const mustBeExcluded = [
+    // GNU diff (POSIX diff) — content-critical like git diff
+    ["diff a.txt b.txt", "diff two files"],
+    ["diff -u a.txt b.txt", "diff -u"],
+    ["diff -r dir1 dir2", "diff -r recursive"],
+
+    // jq / yq — JSON/YAML processors, structured output matters
+    ["jq '.foo' data.json", "jq filter"],
+    ["jq -r '.name' pkg.json", "jq raw"],
+    ["jq . file.json", "jq identity"],
+    ["yq '.foo' data.yaml", "yq filter"],
+    ["yq -r '.version' pom.yaml", "yq raw"],
+  ];
+
+  for (const [cmd, desc] of mustBeExcluded) {
+    it(`RAW: ${desc} — "${cmd}"`, () => {
+      assert.ok(isExcluded(cmd), `Expected excluded: ${cmd}`);
+    });
+  }
+
+  it("'diffstat' is NOT matched by diff\\b (word boundary required)", () => {
+    // `diff\b` requires non-word char after `diff`; `diffstat` has `s` so no boundary.
+    // diffstat output (summary) is safe to compress anyway.
+    assert.ok(!isExcluded("diffstat file.patch"));
+  });
+
+  it("'difference' is NOT a word-boundary match", () => {
+    // `diff\b` requires non-word char after `diff`; `difference` has `e` so no boundary.
+    // But first we must ensure `difference` doesn't start a command and match.
+    // Edge case: echo difference → not excluded
+    assert.ok(!isExcluded("echo difference"));
+  });
+
+  it("'jqscript' (not a word) would match jq\\b edge — filename guard", () => {
+    // `cat jqscript` — cat starts the segment, so jq substring doesn't trigger
+    assert.ok(!isExcluded("cat jqscript.sh"));
+  });
+
+  it("chained: cd repo && diff a b → RAW", () => {
+    assert.ok(isExcluded("cd repo && diff a.txt b.txt"));
+    assert.ok(isExcluded("cd repo && jq '.foo' data.json"));
+  });
+});
+
+describe("v1.0.2 — regression: existing exclusions still work", () => {
+  it("git diff still excluded", () => assert.ok(isExcluded("git diff HEAD~1")));
+  it("cymbal still excluded", () => assert.ok(isExcluded("cymbal investigate X")));
+  it("vitest still excluded", () => assert.ok(isExcluded("vitest")));
+  it("npm run build still compressed", () => assert.ok(!isExcluded("npm run build")));
+  it("ls still compressed", () => assert.ok(!isExcluded("ls -la")));
+});
+
+// ============================================================
 // EXCLUDED regex — must RAW (no compression wrap)
 // ============================================================
 
@@ -189,14 +314,15 @@ describe("shellQuote — POSIX quoting", () => {
 
 describe("buildWrappedCommand — integration", () => {
   it("returns command unchanged when active=false", () => {
-    assert.equal(buildWrappedCommand("npm test", false), "npm test");
+    // v1.0.2: `npm test` is now EXCLUDED, so use `npm install` as the non-excluded sample.
+    assert.equal(buildWrappedCommand("npm install", false), "npm install");
     assert.equal(buildWrappedCommand("git diff", false), "git diff");
   });
 
   it("wraps non-excluded command when active=true", () => {
-    const r = buildWrappedCommand("npm test", true);
+    const r = buildWrappedCommand("npm install", true);
     assert.ok(r.startsWith("lean-ctx -c sh -lc"), `expected wrap, got: ${r}`);
-    assert.ok(r.includes("'npm test'") || r.includes("npm test"));
+    assert.ok(r.includes("'npm install'") || r.includes("npm install"));
   });
 
   it("does NOT wrap excluded command even when active=true", () => {
@@ -259,7 +385,7 @@ describe("isExcluded — multi-segment detection", () => {
 
   it("no excluded segment means not excluded", () => {
     assert.ok(!isExcluded("echo hello"));
-    assert.ok(!isExcluded("cd /path && npm test"));
+    assert.ok(!isExcluded("cd /path && npm install")); // v1.0.2: npm test is now excluded
     assert.ok(!isExcluded("ls && cat file.log"));
   });
 

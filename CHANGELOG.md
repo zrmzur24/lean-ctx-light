@@ -9,6 +9,85 @@ Versioning: [SemVer](https://semver.org/).
 
 Nothing yet.
 
+## [1.0.2] — 2026-04-21
+
+Closes 6 `EXCLUDED` gaps surfaced by reproducible testing against real agent
+workflows, and adds a universal cymbal + lean-ctx discipline reminder at
+`session_start` so the agent stops defaulting to grep/find for code navigation.
+
+### Added
+
+- **6 new `EXCLUDED` patterns** — commands that were compressed-in-error in
+  v1.0.1 are now kept RAW:
+  - `npm test` / `npm run test` / `npm run test:unit` — npm test shortcut
+    and scoped variants (previously only `npm run vitest/tsc/eslint/…` matched).
+  - `node --test` — native Node test runner, with `--test` flag detected
+    anywhere in the arg list (e.g. `node --import tsx --test file.test.ts`).
+  - `diff` — GNU/POSIX `diff` (content-critical like `git diff`).
+  - `jq` / `yq` — JSON/YAML processors; structured output must not be reflowed.
+  - Any command containing `--json` as a standalone flag (e.g.
+    `gh pr view 123 --json number`, `curl --json '{…}'`). This is the first
+    exclusion that is NOT start-of-segment anchored — see `EXCLUDED_CONTAINS`
+    below.
+
+- **`EXCLUDED_CONTAINS` regex (new export in `core.ts`)** — matches flags that
+  force RAW output regardless of where they appear in the segment. Currently
+  covers `--json`. `isExcluded()` now tests both `EXCLUDED` (prefix-anchored)
+  and `EXCLUDED_CONTAINS` (anywhere) per segment.
+
+- **Session-start discipline reminder (`index.ts`)** — when runtime is active,
+  injects one `CustomMessageEntry` per session via `pi.sendMessage(…, {
+  customType: "lean-ctx-light/discipline-reminder", display: true })`:
+  - Reminds the agent to use `cymbal investigate|trace|impact|callers|callees`
+    for symbol navigation instead of grep/find.
+  - Lists the current RAW exceptions and the `LEAN_CTX_DISABLED=` escape.
+  - Deduplicated by scanning `ctx.sessionManager.getEntries()` for prior
+    entries with the same `customType`, so reload/resume/fork don't re-inject.
+  - Gated on `detectRuntime()` — if lean-ctx isn't reachable, the pre-existing
+    warning toast fires instead (no reminder noise when compression is off).
+  - Root cause fixed: pi skills are lazy-loaded, so without an explicit nudge
+    the LLM never discovers cymbal. Shipping the nudge with the compression
+    extension keeps it universal — no project-specific AGENTS.md edits needed.
+
+### Changed
+
+- Updated `bash` tool description to list the full RAW exception set
+  (v1.0.1 omitted `npm test`, `node --test`, `diff`, `jq`, `yq`, `--json`).
+- `index.ts` rewritten with proper `ExtensionContext` typing (previous
+  `as unknown` cast on the session_start handler removed).
+
+### Tests
+
+- 37 new tests in `core.test.ts` covering each gap (positive + negative
+  + edge cases). 116 tests total, 0 failures. Typecheck green.
+- TDD-for-bugs workflow: tests were written first and confirmed failing
+  against v1.0.1 before `EXCLUDED`/`EXCLUDED_CONTAINS` were changed.
+
+### Design decisions
+
+- **`sendMessage` over `appendEntry` for the reminder** — `appendEntry`
+  creates `CustomEntry` (state only, not visible, not in LLM context).
+  `sendMessage(display: true)` creates `CustomMessageEntry` which is
+  rendered in history AND injected into LLM context. The whole point of
+  the reminder is for the LLM to see it, so `sendMessage` is the correct
+  choice.
+- **Dedupe by `customType` scan, not by `reason` gate** — a reason gate
+  (`reason === "new" || "startup"`) is brittle because pi auto-resumes
+  can fire `"startup"` on a session that already has the reminder.
+  Scanning `getEntries()` is O(n) on the existing session length but
+  completely accurate.
+- **Rejected: per-project `.lean-ctx-ignore` config** — YAGNI. The 6 new
+  patterns are universal (every Node project has `npm test`, every repo
+  has `git diff`), so a config layer adds complexity with no gain.
+- **Rejected: cymbal-nudge regex hook on every grep call** — too many
+  false positives (legitimate grep for log patterns etc). One reminder
+  per session is enough.
+
+### Verified compatible with
+
+- pi v0.68.0 (unchanged contract: `createBashToolDefinition` + `spawnHook`
+  + `pi.sendMessage` + `ctx.sessionManager.getEntries`).
+
 ## [1.0.1] — 2026-04-21
 
 Compatibility verification with pi v0.68.0 (released 2026-04-20). No code
@@ -151,6 +230,7 @@ validated on Windows MINGW/Git Bash with extensive adversarial testing.
   compression bug. `docker ps`, `df`, `pytest xfail` not relevant for
   TypeScript/React/Hono stacks but excluded where applicable.
 
-[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.2
 [1.0.1]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.1
 [1.0.0]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.0
