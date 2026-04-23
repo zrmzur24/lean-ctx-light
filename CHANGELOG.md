@@ -9,6 +9,80 @@ Versioning: [SemVer](https://semver.org/).
 
 Nothing yet.
 
+## [1.0.3] — 2026-04-23
+
+Trim the `session_start` reminder to a single line, migrate the cymbal
+navigation guidance out to an opt-in rules file, and add a diagnostic script
+for measuring friction over time.
+
+### Changed
+
+- **`session_start` reminder reduced from ~130 tokens to ~25 tokens.**
+  The v1.0.2 reminder repeated the full list of RAW exceptions and the
+  cymbal navigation rules. Both turned out to be redundant:
+  - The RAW exception list is already in the `bash` tool description —
+    no need to duplicate it in the conversation history.
+  - The cymbal "prefer over grep" guidance is now owned by an opt-in
+    `~/.pi/rules/cymbal.md` file (created by a sibling effort). Rules
+    files live in the system prompt — they don't get compacted away
+    on long sessions, unlike `CustomMessageEntry` payloads.
+
+  The new reminder keeps only the **kill-switch discoverability helper**:
+
+  ```
+  [lean-ctx-light] To force RAW output on any bash command, prefix it
+  with `LEAN_CTX_DISABLED=` (e.g. `LEAN_CTX_DISABLED=1 cat big.log`).
+  ```
+
+  Data from `scripts/analyze-sessions.py` (10 sessions, 1311 bash calls,
+  pre-v1.0.2) showed **233 preemptive `LEAN_CTX_DISABLED=1` uses** —
+  agents kept reinventing the syntax because the tool description alone
+  mentioned it only as `LEAN_CTX_DISABLED=` without an example. A single
+  example closes that discoverability gap cheaply.
+
+- **`customType` kept stable (`lean-ctx-light/discipline-reminder`)** so
+  that a session already holding a v1.0.2 verbose reminder does NOT get
+  a duplicate injection on `/reload` — dedupe via
+  `ctx.sessionManager.getEntries()` still works. The old verbose entry
+  remains visible in that session's history (harmless historical
+  artifact); fresh sessions get the short form.
+
+### Added
+
+- **`scripts/analyze-sessions.py`** — diagnostic that scans session JSONL
+  files under `~/.pi/agent/sessions/*` and classifies bash commands into
+  retry-after-silent-failure, preemptive kill-switch, destructive
+  compression outputs, and grep-on-identifier (cymbal candidates). Used
+  to produce the data cited above. Re-run after 1–2 weeks to measure the
+  impact of v1.0.2 + v1.0.3 + the MCP server removal done in the same
+  wave. Contributed by a sibling agent — see PR history.
+
+### Rationale / context
+
+This release is part of a three-pronged wave:
+
+1. **Remove the `lean-ctx` MCP server** from `~/.pi/agent/mcp.json`
+   (~6600 tokens of system-prompt pollution, 0 calls on 1311 bash
+   commands). Not code in this repo — local config change.
+2. **Create `~/.pi/rules/cymbal.md`** — cross-project, permanent guidance
+   to prefer `cymbal` over `grep -rn` / `rg` for code navigation. Not
+   code in this repo either.
+3. **This release** — trim the now-redundant session-start reminder to
+   a single actionable line.
+
+Together the three changes should free ~6600 tokens/turn of system prompt
+budget, eliminate the `ctx_read vs Read` tool-family confusion, and drop
+the session reminder cost from ~150 to ~25 tokens per session.
+
+### Tests
+
+- 116 unit tests still pass (content of the reminder is a constant, not
+  exercised by unit tests — the reminder behaviour is behavioural and
+  was verified manually in a fresh pi session).
+- Typecheck clean.
+- Rollout plan: merge → tag → release → `git pull` in
+  `~/.pi/agent/extensions/lean-ctx-light` → `/reload` pi.
+
 ## [1.0.2] — 2026-04-21
 
 Closes 6 `EXCLUDED` gaps surfaced by reproducible testing against real agent
@@ -230,7 +304,8 @@ validated on Windows MINGW/Git Bash with extensive adversarial testing.
   compression bug. `docker ps`, `df`, `pytest xfail` not relevant for
   TypeScript/React/Hono stacks but excluded where applicable.
 
-[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.3
 [1.0.2]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.2
 [1.0.1]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.1
 [1.0.0]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.0

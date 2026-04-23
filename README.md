@@ -65,9 +65,17 @@ export const EXCLUDED_CONTAINS = /(?:^|\s)--json(?:[=\s]|$)/;  // v1.0.2: --json
 
 Chained commands (`cd X && cymbal Y`) are handled via `isExcluded()` which splits on `&&`, `;`, `|`, `||`, `\n` and excludes if **any** segment matches either `EXCLUDED` (prefix-anchored) or `EXCLUDED_CONTAINS` (anywhere in segment).
 
-### Session-start discipline reminder (v1.0.2)
+### Session-start escape-hatch reminder (v1.0.2, trimmed in v1.0.3)
 
-When the runtime is active, the extension injects a one-shot reminder into the session history (via `pi.sendMessage` → `CustomMessageEntry`) so the LLM sees it on every turn. It lists the RAW exceptions and nudges the agent to use `cymbal investigate|trace|impact|callers|callees` for code navigation instead of grep/find. Dedup'd by `customType` scan, so reload/resume/fork don't re-inject.
+When the runtime is active, the extension injects a one-shot reminder into the session history (via `pi.sendMessage` → `CustomMessageEntry`) so the LLM sees it. Dedup'd by `customType` scan, so reload/resume/fork don't re-inject.
+
+**v1.0.3** trimmed the reminder down to a single line — the `LEAN_CTX_DISABLED=` kill-switch with a concrete example. The previous (v1.0.2) multi-section reminder was redundant: the RAW exception list is already in the `bash` tool description, and the cymbal navigation guidance is now owned by an opt-in `~/.pi/rules/cymbal.md` file (lives in the system prompt — survives compaction, unlike a `CustomMessageEntry`).
+
+See `CHANGELOG.md [1.0.3]` for the data-driven rationale (233 preemptive kill-switch uses on 1311 bash commands — the syntax was being reinvented because the tool description alone mentioned it without an example).
+
+### Measuring friction (`scripts/analyze-sessions.py`)
+
+A standalone Python diagnostic that walks `~/.pi/agent/sessions/*.jsonl` and classifies bash commands into retry-after-silent-failure, preemptive kill-switch, destructive compression outputs, and grep-on-identifier (cymbal candidates). Useful to measure the impact of changes to `EXCLUDED` / the reminder / companion tools over time. Edit the `SESSION_ROOTS` list in the script to match your pi session paths, then `python3 scripts/analyze-sessions.py`.
 
 Rationale for each exclusion: see [rtk-test adversarial study](https://www.reddit.com/r/ClaudeCode/comments/1spiy8t/) — token optimizers can strip code content from diffs (reducing `git diff` to `file +1/-1`), making code review structurally impossible.
 
