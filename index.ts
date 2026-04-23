@@ -17,8 +17,12 @@
  *   - Robustesse: si lean-ctx ou sh n'est pas disponible, pass-through (pas de wrap)
  *   - Robustesse: si le binaire plante (exit 127/126), fallback sur commande raw
  *     (géré en amont par lean-ctx lui-même via son check sh)
- *   - Discipline: depuis v1.0.2, injecte un rappel cymbal + lean-ctx au session_start
- *     (1x par session, via CustomMessageEntry visible dans l'historique ET le LLM)
+ *   - Discipline: depuis v1.0.2, injecte un rappel au session_start (1x par session,
+ *     via CustomMessageEntry visible dans l'historique ET le LLM).
+ *     En v1.0.3 le rappel a été réduit à une ligne (escape-hatch
+ *     `LEAN_CTX_DISABLED=`) — la partie navigation cymbal vit désormais
+ *     dans `~/.pi/rules/cymbal.md`, et la liste d'exceptions est déjà
+ *     dans la description du tool bash.
  *
  * Installation:
  *   1. Binaire lean-ctx doit être dans le PATH (ou ~/.local/bin/lean-ctx.exe)
@@ -42,33 +46,33 @@ import { createBashToolDefinition } from "@mariozechner/pi-coding-agent";
 import { detectRuntime, buildWrappedCommand } from "./core.ts";
 
 /**
- * customType tag for the session_start discipline reminder.
+ * customType tag for the session_start escape-hatch reminder.
  * Used to deduplicate: if a session already has an entry with this tag,
  * skip re-injection (avoids spam on reload/resume/fork).
+ *
+ * Kept stable across v1.0.2 → v1.0.3 so that sessions already holding a
+ * v1.0.2 reminder don't get a duplicate injection on /reload.
  */
 const REMINDER_CUSTOM_TYPE = "lean-ctx-light/discipline-reminder";
 
 /**
- * The reminder text. Kept intentionally short (~130 tokens) since it will be
- * part of LLM context for every turn of this session.
+ * The reminder text — v1.0.3 trimmed edition (~25 tokens, down from ~130).
  *
- * Rationale: pi skills are lazy-loaded (must be requested by the agent), so
- * without an explicit nudge the LLM defaults to grep/find and never discovers
- * cymbal. This reminder fixes the "cymbal non-utilisé" root cause universally,
- * without touching project-specific extensions (mcmg-workflow, AGENTS.md, …).
+ * Why it's so short now:
+ *   - The bash tool description already lists every RAW exception, so the
+ *     reminder doesn't need to repeat them.
+ *   - Code-navigation guidance (prefer cymbal over grep) is handled by
+ *     `~/.pi/rules/cymbal.md` (project-owned rules file, permanent in the
+ *     system prompt, doesn't get compacted away).
+ *   - The one thing the tool description does NOT teach well is the
+ *     kill-switch SYNTAX. Empirical data (10 sessions, 1311 bash calls)
+ *     showed 233 preemptive `LEAN_CTX_DISABLED=1` uses — agents keep
+ *     reinventing the trick. A one-line example at session_start closes
+ *     that discoverability gap cheaply.
  */
 const REMINDER_CONTENT =
-	"[lean-ctx-light] Code navigation & bash compression discipline active for this session.\n" +
-	"\n" +
-	"• Symbol navigation — prefer `cymbal` over grep/find when tracing code:\n" +
-	"    cymbal investigate|trace|impact|callers|callees <Symbol>\n" +
-	"  Use it for: finding defs/refs, tracing handlers, impact analysis before refactors.\n" +
-	"\n" +
-	"• Bash output is auto-compressed via lean-ctx (60–90% token savings).\n" +
-	"  RAW exceptions (never compressed):\n" +
-	"    git diff/show/log · cymbal · vitest/tsc/eslint · npm test · node --test\n" +
-	"    diff · jq · yq · any command with --json · LEAN_CTX_DISABLED= prefix\n" +
-	"  To force RAW on any command, prefix with `LEAN_CTX_DISABLED=` (e.g. `LEAN_CTX_DISABLED=1 cat big.log`).";
+	"[lean-ctx-light] To force RAW output on any bash command, prefix it with " +
+	"`LEAN_CTX_DISABLED=` (e.g. `LEAN_CTX_DISABLED=1 cat big.log`).";
 
 export default function (pi: ExtensionAPI): void {
 	const runtime = detectRuntime();

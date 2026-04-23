@@ -1,6 +1,6 @@
 {
   "name": "lean-ctx-light",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "pi micro-extension: route bash through lean-ctx with hardcoded exclusions (git diff/show/log, cymbal, test runners). No MCP pollution.",
   "type": "module",
