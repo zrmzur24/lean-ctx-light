@@ -3,8 +3,12 @@ Analyse des sessions pi pour quantifier frictions lean-ctx et cymbal.
 Version 2 : détection destructive élargie + classification des patterns de retry.
 """
 
-import json, re, os, glob, sys
+import json, re, os, glob, sys, io
 from collections import defaultdict, Counter
+
+# Fix Windows cp1252 stdout encoding — required for Unicode arrows/emoji in output
+if sys.stdout.encoding and sys.stdout.encoding.lower().replace('-','') != 'utf8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 SESSION_ROOTS = [
     os.path.expanduser("~/.pi/agent/sessions/--C--Users-ae265409-pi_projects-mcmg2--"),
