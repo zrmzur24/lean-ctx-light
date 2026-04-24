@@ -48,7 +48,7 @@ Size comparison:
 ```ts
 // core.ts
 export const EXCLUDED = /^\s*(
-  git\s+(diff|show|log)           // content-critical for review/audit
+  git\s+(diff|show|log|grep)      // content-critical for review/audit (grep v1.0.4)
   |cymbal                          // already optimized, avoid double-processing
   |LEAN_CTX_DISABLED=              // explicit kill-switch
   |(npm\s+run\s+)?(vitest|tsc|eslint|lint|typecheck)\b   // test runners (FAIL detection)
@@ -58,6 +58,8 @@ export const EXCLUDED = /^\s*(
   |diff\b                          // GNU diff, content-critical (v1.0.2)
   |jq\b                            // JSON processor, structured output (v1.0.2)
   |yq\b                            // YAML processor, structured output (v1.0.2)
+  |(?:e|f)?grep\b                  // grep/egrep/fgrep: file:line:content gets dedup-ed (v1.0.4)
+  |rg\b                            // ripgrep: same problem as grep (v1.0.4)
 )/
 
 export const EXCLUDED_CONTAINS = /(?:^|\s)--json(?:[=\s]|$)/;  // v1.0.2: --json flag anywhere
@@ -207,7 +209,7 @@ source ~/.bashrc
 
 ```bash
 npm install  # once
-npm test     # 116 tests (v1.0.2): EXCLUDED/EXCLUDED_CONTAINS regex, shellQuote, detectRuntime, isExcluded, buildWrappedCommand
+npm test     # 138 tests (v1.0.4): EXCLUDED/EXCLUDED_CONTAINS regex, shellQuote, detectRuntime, isExcluded, buildWrappedCommand
 npm run typecheck
 ```
 

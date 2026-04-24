@@ -9,6 +9,90 @@ Versioning: [SemVer](https://semver.org/).
 
 Nothing yet.
 
+## [1.0.4] — 2026-04-24
+
+Adds `grep`, `egrep`, `fgrep`, `rg` and `git grep` to the RAW exception list.
+Data-driven decision: these tools accounted for **48 % of the remaining
+kill-switches** and **39 % of the remaining destructive outputs** in sessions
+run under v1.0.3.
+
+### Added
+
+- **5 new `EXCLUDED` patterns** — kept RAW:
+  - `grep` / `egrep` / `fgrep` — all start-of-segment, with word boundary
+    (`pgrep`, `grepme`, filenames containing "grep" still compress normally).
+  - `rg` (ripgrep) — same rules.
+  - `git grep` — folded into the existing `git (diff|show|log|grep)`
+    alternative, for ergonomic consistency with other git exclusions.
+
+### Rationale
+
+Lean-ctx's default compression pass deduplicates consecutive identical /
+similar lines and then shows only the **last 15 unique lines**. On `grep`
+output of the form
+
+```
+src/a.ts:12:import { Foo } from '…';
+src/a.ts:44:  const x = new Foo();
+src/b.ts:7:import { Foo } from '…';
+…
+```
+
+this pass is structurally wrong — every line is unique, yet the compressor
+still drops the top-N and emits `40 lines → 40 unique / last 15 unique lines`.
+The agent loses the leading matches and has to re-run with
+`LEAN_CTX_DISABLED=1`. Empirically that's exactly what was happening.
+
+### Measurement (12 sessions, 1023 bash commands, post-v1.0.3)
+
+| Source              | Before v1.0.4 | Root cause                   |
+| ------------------- | ------------- | ---------------------------- |
+| `grep/rg` kill-switches (preemptive) | 24  | agents learnt to preempt     |
+| `grep/rg` kill-switches (retry)      | 5   | agents didn't learn, retried |
+| destructive grep outputs (no kill-switch) | 11 | agents kept broken output |
+| **Total grep-related friction** | **40 / 60** | — |
+
+After v1.0.4, every one of those 40 events happens automatically, zero
+agent-side syntax needed.
+
+### Edge cases
+
+- `pgrep` (process grep, output is PIDs — compression fine) is NOT excluded.
+- `rgrep` (synonym of `grep -r`, niche) is NOT excluded; users typically
+  write `grep -r` which IS excluded. Documented in tests as an acceptable miss.
+- `grep -c` (counts only, tiny output) IS excluded — chose consistency over
+  micro-optimisation (word-boundary would be ugly and `grep -c` is rare).
+
+### What this release explicitly does NOT do
+
+Based on the same 12-session analysis:
+
+- **`cat` / `head` / `tail` are NOT excluded.** Only 8 events (4 preemptive
+  + 4 retries). Blanket exclusion would kill compression on legitimate
+  `cat big.log`, and the right fix for reading source files is the pi `Read`
+  tool, not `cat`.
+- **No cymbal-nudge hook.** 0 cymbal uses across 22 sessions despite the
+  global `~/.pi/agent/AGENTS.md` pointing at it — passive guidance has
+  empirically failed. Active enforcement is a separate design question
+  (being thought about after this release).
+- **No upstream patch on `yvgude/lean-ctx` for `--no-dedup`.** Out of this
+  repo's control; may be pursued separately if the remaining 17 non-grep
+  destructive outputs become a problem.
+
+### Tests
+
+- 22 new unit tests in `core.test.ts` (17 positive, 5 edge-case negatives).
+- 138 total, 0 failures. Typecheck green.
+- TDD workflow: tests written first, confirmed 16 failures on v1.0.3 regex
+  before `EXCLUDED` was updated.
+
+### Changed
+
+- `bash` tool description updated to list the new exceptions
+  (`git diff/show/log/grep` + `grep/egrep/fgrep/rg`).
+- Regex alternative `git\s+(diff|show|log)` extended to
+  `git\s+(diff|show|log|grep)`.
+
 ## [1.0.3] — 2026-04-23
 
 Trim the `session_start` reminder to a single line, migrate the cymbal
@@ -304,7 +388,8 @@ validated on Windows MINGW/Git Bash with extensive adversarial testing.
   compression bug. `docker ps`, `df`, `pytest xfail` not relevant for
   TypeScript/React/Hono stacks but excluded where applicable.
 
-[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.4
 [1.0.3]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.3
 [1.0.2]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.2
 [1.0.1]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.1
