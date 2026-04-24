@@ -139,6 +139,85 @@ describe("v1.0.2 — regression: existing exclusions still work", () => {
 });
 
 // ============================================================
+// v1.0.4 — grep / rg / egrep / fgrep / git grep must stay RAW
+// Data: 29 kill-switches + 11 destructive outputs in post-v1.0.3 sessions,
+// all caused by lean-ctx's `lines dedup / last N unique lines` on grep output.
+// ============================================================
+
+describe("v1.0.4 — grep / rg variants must stay RAW (lines-dedup kills them)", () => {
+  const mustBeExcluded = [
+    // bare grep
+    ["grep foo file.txt", "grep simple"],
+    ["grep -rn 'pattern' src/", "grep -rn recursive"],
+    ["grep -E 'a|b' .", "grep -E extended"],
+    ["grep --version", "grep --version"],
+    ["grep -c foo file", "grep -c count (tiny but still grep output)"],
+
+    // grep variants (deprecated but still used)
+    ["egrep 'a|b' .", "egrep"],
+    ["fgrep 'literal-string' .", "fgrep"],
+
+    // ripgrep
+    ["rg foo", "rg simple"],
+    ["rg -n 'pattern'", "rg -n with pattern"],
+    ["rg --no-ignore src/", "rg with --no-ignore"],
+    ["rg -t ts 'Handler'", "rg -t file-type filter"],
+
+    // git grep — same file:line:content output shape, same dedup problem
+    ["git grep foo", "git grep"],
+    ["git grep -n 'pattern' HEAD~1", "git grep with ref"],
+
+    // chained / piped (isExcluded splits on &&, ;, |, ||, \n)
+    ["cd /repo && grep -rn foo .", "chained with cd"],
+    ["ls | grep foo", "piped into grep"],
+    ["cat file | rg foo", "piped into rg"],
+  ];
+
+  for (const [cmd, desc] of mustBeExcluded) {
+    it(`RAW: ${desc} — "${cmd}"`, () => {
+      assert.ok(isExcluded(cmd), `Expected excluded: ${cmd}`);
+    });
+  }
+});
+
+describe("v1.0.4 — grep/rg edge cases (no false positives)", () => {
+  it("'pgrep' (process grep) does NOT match — output is PIDs, compression fine", () => {
+    assert.ok(!isExcluded("pgrep myprocess"));
+  });
+
+  it("'grepme' does NOT match (no word boundary after grep)", () => {
+    assert.ok(!isExcluded("grepme foo"));
+  });
+
+  it("'rgb' / 'rgrep' do NOT match rg\\b / grep\\b", () => {
+    assert.ok(!isExcluded("rgb --color ."));
+    // rgrep starts with 'r' not 'g' or 'e' or 'f' — the (?:e|f)?grep\b branch
+    // requires prefix match at pos 0, so rgrep is NOT excluded. Acceptable miss
+    // (rgrep is rare, and its output is the same as grep-r which IS excluded
+    // via the normal grep path anyway — most users just use `grep -r`).
+    assert.ok(!isExcluded("rgrep foo ."));
+  });
+
+  it("filenames containing 'grep' don't trigger a match", () => {
+    assert.ok(!isExcluded("cat grep-output.log"));
+    assert.ok(!isExcluded("ls grep-results/"));
+    assert.ok(!isExcluded("cat file.grep.log"));
+  });
+
+  it("echo with grep in string literal does NOT match", () => {
+    // `^\s*` anchor means the word must START the segment. echo starts, grep is just in args.
+    assert.ok(!isExcluded("echo 'use grep for strings'"));
+    assert.ok(!isExcluded("echo rg is fast"));
+  });
+
+  it("chained: non-grep segments stay compressible", () => {
+    // `ls && cat x` stays compressed; only segments that START with grep/rg are excluded
+    assert.ok(!isExcluded("ls && cat file.log"));
+    assert.ok(!isExcluded("pwd && date"));
+  });
+});
+
+// ============================================================
 // EXCLUDED regex — must RAW (no compression wrap)
 // ============================================================
 
@@ -216,7 +295,9 @@ describe("EXCLUDED regex — commands that must be COMPRESSED", () => {
     ["echo 'use git diff'", "echo with diff in string"],
     ["cat file-vitest.log", "cat with vitest in filename"],
     ["ls cymbal_ref/", "ls with cymbal in dir name"],
-    ["grep -r TODO .", "grep"],
+    // v1.0.4 — `grep -r TODO .` IS now excluded (moved to v1.0.4 tests below).
+    // Replaced with something non-grep:
+    ["printf 'hello'", "printf"],
 
     // commands with 'git' but not matching diff/show/log
     ["git add .", "git add"],

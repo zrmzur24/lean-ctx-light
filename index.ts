@@ -7,13 +7,15 @@
  * Philosophie:
  *   - Override UNIQUEMENT le tool bash (pas de MCP bridge, pas de pollution prompt)
  *   - Exclusions HARDCODED (plus fiable que config.toml) :
- *       * git diff/show/log → contenu critique, ne JAMAIS compresser (risque doc review)
+ *       * git diff/show/log/grep → contenu critique, ne JAMAIS compresser
  *       * cymbal            → output déjà optimisé, éviter double-processing
  *       * LEAN_CTX_DISABLED= → respect du kill-switch explicit
  *       * vitest / tsc / eslint / tsc --noEmit / npx tsc → sorties déjà structurées,
  *         risque de perdre des FAIL/error si lean-ctx ne connaît pas le pattern
  *       * npm test / node --test → native test runners (ajouté v1.0.2)
  *       * diff / jq / yq / --json flag → outputs structurés (ajouté v1.0.2)
+ *       * grep / egrep / fgrep / rg → `file:line:content` écrasé par la dédup
+ *         `lines → unique / last 15 unique lines` (ajouté v1.0.4)
  *   - Robustesse: si lean-ctx ou sh n'est pas disponible, pass-through (pas de wrap)
  *   - Robustesse: si le binaire plante (exit 127/126), fallback sur commande raw
  *     (géré en amont par lean-ctx lui-même via son check sh)
@@ -91,8 +93,9 @@ export default function (pi: ExtensionAPI): void {
 		...baseBash,
 		description: active
 			? "Execute a bash command. Output compressed via lean-ctx (60-90% token savings). " +
-				"Exceptions kept RAW : git diff/show/log, cymbal, vitest/tsc/eslint, npm test, " +
-				"node --test, diff, jq, yq, any --json flag, LEAN_CTX_DISABLED= prefix."
+				"Exceptions kept RAW : git diff/show/log/grep, cymbal, vitest/tsc/eslint, npm test, " +
+				"node --test, diff, jq, yq, grep/egrep/fgrep/rg, any --json flag, " +
+				"LEAN_CTX_DISABLED= prefix."
 			: "Execute a bash command. lean-ctx wrapping DISABLED (runtime not ready: " +
 				runtime.reason +
 				"). Commands run natively without compression.",

@@ -11,7 +11,10 @@ import { spawnSync } from "node:child_process";
 // Exclusions : commandes dont l'output doit rester RAW.
 //
 // Groupes (prefix-anchored — doit commencer au début du segment) :
-//   - git\s+(diff|show|log)                  → contenu critique pour review/audit
+//   - git\s+(diff|show|log|grep)              → contenu critique pour review/audit ;
+//                                                 `git grep` a la même forme
+//                                                 `file:line:content` que `grep`
+//                                                 et souffre de la même dédup.
 //   - cymbal                                   → déjà optimisé, éviter double-processing
 //   - LEAN_CTX_DISABLED=                       → kill-switch explicit de l'agent
 //   - (npm run )?(vitest|tsc|eslint|lint|typecheck) → runners tests/typecheck/lint
@@ -20,6 +23,16 @@ import { spawnSync } from "node:child_process";
 //   - node ... --test\b                       → native Node test runner (--test anywhere)
 //   - diff\b                                   → GNU diff, contenu critique comme git diff
 //   - jq\b / yq\b                              → JSON/YAML processors, output structuré
+//   - (e|f)?grep\b | rg\b                     → grep / egrep / fgrep / ripgrep (v1.0.4)
+//                                                 lean-ctx déduplique agressivement
+//                                                 les sorties `file:line:content`
+//                                                 et n'affiche que les 15 dernières
+//                                                 lignes uniques, ce qui rend la
+//                                                 sortie inutilisable même quand
+//                                                 toutes les lignes sont uniques.
+//                                                 Données post-v1.0.3 : 29/60
+//                                                 kill-switches + 11/28 outputs
+//                                                 destructifs étaient du grep.
 //
 // Groupe CONTAINS (flag n'importe où dans le segment) :
 //   - --json                                   → commandes émettant du JSON structuré
@@ -27,7 +40,7 @@ import { spawnSync } from "node:child_process";
 //
 // Pour les test runners : leur sortie est déjà structurée et critique
 // pour l'agent (détection FAIL, error TSxxxx, etc.). Compression risquée.
-export const EXCLUDED = /^\s*(git\s+(diff|show|log)|cymbal|LEAN_CTX_DISABLED=|(npm\s+run\s+)?(vitest|tsc|eslint|lint|typecheck)\b|(npx\s+)?(vitest|tsc|eslint)\b|npm\s+(run\s+)?test\b|node\s+(\S+\s+)*--test\b|diff\b|jq\b|yq\b)/;
+export const EXCLUDED = /^\s*(git\s+(diff|show|log|grep)|cymbal|LEAN_CTX_DISABLED=|(npm\s+run\s+)?(vitest|tsc|eslint|lint|typecheck)\b|(npx\s+)?(vitest|tsc|eslint)\b|npm\s+(run\s+)?test\b|node\s+(\S+\s+)*--test\b|diff\b|jq\b|yq\b|(?:e|f)?grep\b|rg\b)/;
 
 // Flags qui forcent RAW où qu'ils soient dans le segment.
 // --json : gh/curl/… émettent du JSON structuré que l'agent doit parser ;
