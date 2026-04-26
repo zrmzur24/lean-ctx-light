@@ -44,7 +44,11 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { createBashToolDefinition } from "@mariozechner/pi-coding-agent";
+import {
+	createBashToolDefinition,
+	DEFAULT_MAX_LINES,
+	DEFAULT_MAX_BYTES,
+} from "@mariozechner/pi-coding-agent";
 import { detectRuntime, buildWrappedCommand } from "./core.ts";
 
 /**
@@ -89,16 +93,34 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 
+	// Build the description with the actual pi-native truncation limits, so the
+	// LLM sees concrete numbers and stays in sync if pi ever changes them.
+	// (v1.0.5: re-added the truncation note that pi's default description carries
+	// but which we replaced when we registered our own description in v1.0.2.)
+	const kbLimit = Math.round(DEFAULT_MAX_BYTES / 1024);
+	const truncationNote =
+		" Output is truncated to the last " +
+		DEFAULT_MAX_LINES +
+		" lines or " +
+		kbLimit +
+		"KB (pi-native truncateTail, applied AFTER any lean-ctx compression); " +
+		"the full output is saved to a temp log file visible to the user only " +
+		"(the LLM does not receive the temp file path's contents automatically). " +
+		"For very verbose runs, filter explicitly via `| tail -N`, `| head -N`, " +
+		'`| grep PATTERN`, `2>&1 | grep -E "FAIL|error"`, etc.';
+
 	pi.registerTool({
 		...baseBash,
 		description: active
 			? "Execute a bash command. Output compressed via lean-ctx (60-90% token savings). " +
 				"Exceptions kept RAW : git diff/show/log/grep, cymbal, vitest/tsc/eslint, npm test, " +
 				"node --test, diff, jq, yq, grep/egrep/fgrep/rg, any --json flag, " +
-				"LEAN_CTX_DISABLED= prefix."
+				"LEAN_CTX_DISABLED= prefix." +
+				truncationNote
 			: "Execute a bash command. lean-ctx wrapping DISABLED (runtime not ready: " +
 				runtime.reason +
-				"). Commands run natively without compression.",
+				"). Commands run natively without compression." +
+				truncationNote,
 	});
 
 	if (active) {
