@@ -9,6 +9,64 @@ Versioning: [SemVer](https://semver.org/).
 
 Nothing yet.
 
+## [1.0.5] — 2026-04-25
+
+Re-adds pi's truncation note to the `bash` tool description — a regression
+introduced when v1.0.2 first replaced the description.
+
+### Background
+
+pi's default `bash` tool description includes a sentence about output
+truncation:
+
+> Output is truncated to last 2000 lines or 50KB (whichever is hit first).
+> If truncated, full output is saved to a temp file.
+
+This is **not just visual**. pi applies `truncateTail()` to the output and
+the LLM literally never sees the dropped portion (the temp log file is for
+the human user only — the LLM doesn't receive its contents).
+
+When this extension started overriding the `bash` description in v1.0.2 to
+advertise the lean-ctx exception list, that truncation note got dropped —
+so the LLM stopped seeing it and could be surprised when verbose commands
+like `npm test` returned only the last ~2000 lines.
+
+### Added
+
+- Truncation note re-added to **both** the active and inactive description
+  branches. Numbers are imported from `pi-coding-agent`'s
+  `DEFAULT_MAX_LINES` / `DEFAULT_MAX_BYTES` constants — if pi ever changes
+  them, this description follows automatically.
+
+  The new active description now ends with:
+
+  > Output is truncated to the last 2000 lines or 50KB (pi-native
+  > truncateTail, applied AFTER any lean-ctx compression); the full output
+  > is saved to a temp log file visible to the user only (the LLM does not
+  > receive the temp file path's contents automatically). For very verbose
+  > runs, filter explicitly via `| tail -N`, `| head -N`, `| grep PATTERN`,
+  > `2>&1 | grep -E "FAIL|error"`, etc.
+
+### Cost
+
++85 tokens in the system prompt per session (description goes from ~75
+to ~160 tokens). Static cost, paid once per turn regardless of bash usage.
+Worth it: the LLM now proactively filters very verbose commands instead
+of being surprised by truncation.
+
+### Tests
+
+- 138 unit tests still pass (description content is a constant, not
+  exercised by unit tests — string-only change).
+- Typecheck green (new `DEFAULT_MAX_LINES` / `DEFAULT_MAX_BYTES` imports
+  resolve cleanly from `pi-coding-agent`).
+
+### Why this is its own release (not folded into v1.0.6 or similar)
+
+Keeping the change focused makes it trivial to revert if the +85 tokens
+turn out to be unwanted, or if pi changes its truncation defaults in a
+breaking way. Diff is ~20 lines, contained to `index.ts`.
+
 ## [1.0.4] — 2026-04-24
 
 Adds `grep`, `egrep`, `fgrep`, `rg` and `git grep` to the RAW exception list.
@@ -388,7 +446,8 @@ validated on Windows MINGW/Git Bash with extensive adversarial testing.
   compression bug. `docker ps`, `df`, `pytest xfail` not relevant for
   TypeScript/React/Hono stacks but excluded where applicable.
 
-[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/zrmzur24/lean-ctx-light/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.5
 [1.0.4]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.4
 [1.0.3]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.3
 [1.0.2]: https://github.com/zrmzur24/lean-ctx-light/releases/tag/v1.0.2
