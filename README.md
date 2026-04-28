@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/zrmzur24-lean-ctx-light-badge.png)](https://mseep.ai/app/zrmzur24-lean-ctx-light)
+
 # lean-ctx-light
 
 [![CI](https://github.com/zrmzur24/lean-ctx-light/actions/workflows/ci.yml/badge.svg)](https://github.com/zrmzur24/lean-ctx-light/actions/workflows/ci.yml)
